@@ -148,6 +148,26 @@
   // ---- Record label + stats -------------------------------------------------
   const NAME_FIELDS = ["Name", "Title", "DisplayName", "Display_Name", "UIName", "Display", "ItemName"];
   const STAT_FIELDS = ["Damage", "Armor", "Durability", "Weight", "Value"];
+  const BUILTIN_PRESENTERS = {
+    "items_*": {
+      titlePaths: ["Name", "Title", "DisplayName", "Display_Name", "ItemName"],
+      resultStatPaths: ["Damage", "Armor", "Durability", "Weight", "Value"],
+      detailPriorityPaths: ["Description", "Stats", "Requirements", "Effects"],
+      searchPaths: ["Name", "Title", "DisplayName", "Display_Name", "ItemName", "Description"],
+    },
+    "status_effects_*": {
+      titlePaths: ["Name", "Title", "DisplayName", "Display_Name"],
+      resultStatPaths: ["Duration", "Magnitude", "StackLimit", "Stacks", "Interval"],
+      detailPriorityPaths: ["Description", "Effects", "Modifiers"],
+      searchPaths: ["Name", "Title", "DisplayName", "Display_Name", "Description", "Effects"],
+    },
+    "codex_entries_*": {
+      titlePaths: ["Title", "Name", "DisplayName", "Display_Name"],
+      resultStatPaths: ["Category", "Type", "Value"],
+      detailPriorityPaths: ["Summary", "Description", "Category"],
+      searchPaths: ["Title", "Name", "DisplayName", "Display_Name", "Summary", "Description", "Category"],
+    },
+  };
 
   function findKeyCaseInsensitive(obj, desired) {
     if (!obj || typeof obj !== "object") return null;
@@ -172,14 +192,20 @@
       ...base,
       ...override,
       titleFields: Array.isArray(override.titleFields) ? override.titleFields : base.titleFields,
+      titlePaths: Array.isArray(override.titlePaths) ? override.titlePaths : base.titlePaths,
       statsFields: Array.isArray(override.statsFields) ? override.statsFields : base.statsFields,
+      resultStatPaths: Array.isArray(override.resultStatPaths) ? override.resultStatPaths : base.resultStatPaths,
       sections: Array.isArray(override.sections) ? override.sections : base.sections,
+      detailPriorityPaths: Array.isArray(override.detailPriorityPaths)
+        ? override.detailPriorityPaths
+        : base.detailPriorityPaths,
+      searchPaths: Array.isArray(override.searchPaths) ? override.searchPaths : base.searchPaths,
     };
   }
 
   function getPresenter(datasetKey) {
     if (!state.presenters) return null;
-    const presenters = state.presenters;
+    const presenters = { ...BUILTIN_PRESENTERS, ...state.presenters };
     const base = presenters.default || {};
     let merged = mergePresenters(base, null);
     const wildcards = Object.entries(presenters)
@@ -195,6 +221,53 @@
     const exact = presenters[datasetKey];
     merged = mergePresenters(merged, exact);
     return merged;
+  }
+
+  function getValueAtPath(obj, path) {
+    if (!path) return [];
+    const segments = String(path).split(".").filter(Boolean);
+    if (segments.length === 0) return [];
+
+    const walk = (current, idx) => {
+      if (current == null) return [];
+      if (idx >= segments.length) return [current];
+      const seg = segments[idx];
+
+      if (Array.isArray(current)) {
+        const numeric = Number(seg);
+        if (!Number.isNaN(numeric)) {
+          return walk(current[numeric], idx + 1);
+        }
+        return current.flatMap((item) => walk(item, idx));
+      }
+
+      if (typeof current === "object") {
+        const key = findKeyCaseInsensitive(current, seg);
+        if (!key) return [];
+        return walk(current[key], idx + 1);
+      }
+      return [];
+    };
+
+    return walk(obj, 0);
+  }
+
+  function pathLabel(path) {
+    const parts = String(path).split(".").filter(Boolean);
+    return parts.length ? parts[parts.length - 1] : path;
+  }
+
+  function stringifySearchValue(value) {
+    if (value == null) return "";
+    if (typeof value === "string") return prettyText(value);
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
+    if (Array.isArray(value)) {
+      const parts = value
+        .map((v) => stringifySearchValue(v))
+        .filter(Boolean);
+      return parts.join(" ");
+    }
+    return "";
   }
 
   // ---- Dataset adapters -----------------------------------------------------
@@ -265,6 +338,15 @@
 
   function getPresenterTitle(record, presenter) {
     if (!presenter) return null;
+    if (Array.isArray(presenter.titlePaths)) {
+      for (const path of presenter.titlePaths) {
+        const values = getValueAtPath(record, path);
+        for (const value of values) {
+          const text = valueToShortString(value);
+          if (text) return text;
+        }
+      }
+    }
     if (Array.isArray(presenter.titleFields)) {
       const raw = pickFirstField(record, presenter.titleFields);
       if (raw != null && raw !== "") return raw;
@@ -274,6 +356,17 @@
 
   function getPresenterStats(record, presenter) {
     if (!presenter) return null;
+    if (Array.isArray(presenter.resultStatPaths)) {
+      const out = [];
+      for (const path of presenter.resultStatPaths) {
+        const values = getValueAtPath(record, path);
+        const value = values.find((v) => v != null && v !== "");
+        if (value == null) continue;
+        out.push({ label: pathLabel(path), value });
+        if (out.length >= 2) break;
+      }
+      return out.length ? out : null;
+    }
     if (Array.isArray(presenter.statsFields)) {
       return buildStatList(record, presenter.statsFields);
     }
@@ -287,6 +380,32 @@
       const data = pickFirstField(record, section.fields || []);
       return buildSection(section.title, data);
     }).filter(Boolean);
+  }
+
+  function getPresenterPriorityFields(record, presenter) {
+    if (!presenter || !Array.isArray(presenter.detailPriorityPaths)) return [];
+    const out = [];
+    for (const path of presenter.detailPriorityPaths) {
+      const values = getValueAtPath(record, path);
+      if (values.length === 0) continue;
+      const value = values.find((v) => v != null && v !== "");
+      if (value == null) continue;
+      out.push({ label: path, value });
+    }
+    return out;
+  }
+
+  function getPresenterSearchValues(record, presenter) {
+    if (!presenter || !Array.isArray(presenter.searchPaths)) return [];
+    const out = [];
+    for (const path of presenter.searchPaths) {
+      const values = getValueAtPath(record, path);
+      for (const value of values) {
+        const text = stringifySearchValue(value);
+        if (text) out.push(text);
+      }
+    }
+    return out;
   }
 
   function valueToShortString(v) {
@@ -718,8 +837,34 @@
   }
 
   function renderPresenterSections(host, record, presenter, showHidden) {
+    const priorityFields = getPresenterPriorityFields(record, presenter);
+    for (const field of priorityFields) {
+      const value = normalizeValueForDisplay(field.value);
+      const isPrimitive = value == null || typeof value === "string" || typeof value === "number" || typeof value === "boolean";
+      if (isPrimitive) {
+        host.appendChild(el("div", { class: "kv" },
+          el("div", { class: "k" }, field.label),
+          el("div", { class: "v" }, formatDisplayValue(value))
+        ));
+      } else {
+        const summary = formatDisplayValue(value);
+        host.appendChild(el("details", { class: "details-block" },
+          el("summary", {}, `${field.label}${summary ? ` — ${summary}` : ""}`),
+          el("pre", {}, safeJson(value))
+        ));
+      }
+    }
+
     const sections = getPresenterSections(record, presenter);
-    if (!sections || sections.length === 0) return false;
+    if (!sections || sections.length === 0) {
+      if (showHidden) {
+        host.appendChild(el("details", { class: "details-block" },
+          el("summary", {}, "All Fields"),
+          el("pre", {}, safeJson(normalizeValueForDisplay(record)))
+        ));
+      }
+      return priorityFields.length > 0 || showHidden;
+    }
 
     for (const section of sections) {
       const block = el("details", { class: "details-block", open: true },
@@ -936,7 +1081,8 @@
     if (ds.hayCache.has(id)) return ds.hayCache.get(id);
 
     const label = getRecordLabel(ds, id, record);
-    const hay = `${label} ${id}`.toLowerCase();
+    const extra = getPresenterSearchValues(record, ds.presenter).join(" ");
+    const hay = `${label} ${id} ${extra}`.toLowerCase();
     ds.hayCache.set(id, hay);
     return hay;
   }
@@ -982,6 +1128,20 @@
     state.index = idx;
     setStatus(`Index loaded. ${Object.keys(idx.datasets).length} dataset keys available.`);
     return idx;
+  }
+
+  async function loadPresenters() {
+    try {
+      const res = await fetch(PRESENTERS_URL, { cache: "no-store" });
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      const json = await res.json();
+      if (!json || typeof json !== "object") return null;
+      state.presenters = json;
+      return json;
+    } catch {
+      return null;
+    }
   }
 
   async function loadPresenters() {
