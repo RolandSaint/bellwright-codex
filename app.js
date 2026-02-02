@@ -857,7 +857,13 @@
 
     const sections = getPresenterSections(record, presenter);
     if (!sections || sections.length === 0) {
-      return priorityFields.length > 0;
+      if (showHidden) {
+        host.appendChild(el("details", { class: "details-block" },
+          el("summary", {}, "All Fields"),
+          el("pre", {}, safeJson(normalizeValueForDisplay(record)))
+        ));
+      }
+      return priorityFields.length > 0 || showHidden;
     }
 
     for (const section of sections) {
