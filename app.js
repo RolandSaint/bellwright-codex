@@ -16,6 +16,7 @@
     currentQuery: "",
     currentResults: [],         // [{id,label,stats}]
     selectedId: null,
+    hiddenFieldsByDataset: new Map(),
   };
 
   // ---- DOM helpers ----------------------------------------------------------
@@ -174,6 +175,204 @@
       return "Object";
     }
     return String(v);
+  }
+
+  // ---- Normalization/formatting --------------------------------------------
+  const WRAPPER_KEYS = ["Value", "Text", "SourceString", "Name", "Title"];
+  const ID_KEYS = ["id", "ID", "key", "Key", "Name", "Title", "Path", "AssetPath", "AssetPathName", "RowName"];
+  const TAG_KEYS = ["Tag", "Tags", "tag", "tags"];
+  const PATH_KEYS = ["Path", "path", "AssetPath", "AssetPathName", "ObjectPath"];
+  const MAX_ARRAY_INLINE = 12;
+  const HIDDEN_FIELDS_STORAGE_KEY = "bellwright.details.showHiddenByDataset";
+  const NOISE_KEYS = new Set([
+    "class",
+    "outer",
+    "package",
+    "rowstruct",
+    "exportpath",
+    "objectname",
+    "objectpath",
+    "archetype",
+    "persistentguid",
+    "guid",
+    "packageguid",
+    "exportflags",
+    "nativeparentclass",
+    "superstruct",
+    "defaultobject",
+    "assetimportdata",
+    "assetpathname",
+    "parentclass",
+    "linkerload",
+    "linkerpackage",
+    "cookedin",
+    "iscooked",
+    "editoronlydata",
+    "createdby",
+  ]);
+
+  function unwrapWrapperObject(obj) {
+    if (!obj || typeof obj !== "object" || Array.isArray(obj)) return obj;
+    const keys = Object.keys(obj);
+    if (keys.length !== 1) return obj;
+    const key = keys[0];
+    if (!WRAPPER_KEYS.includes(key)) return obj;
+    return obj[key];
+  }
+
+  function normalizeTagLike(obj) {
+    if (!obj || typeof obj !== "object" || Array.isArray(obj)) return null;
+    const tagKey = pickFirstField(obj, TAG_KEYS);
+    if (typeof tagKey === "string") return prettyText(tagKey);
+    return null;
+  }
+
+  function normalizePathLike(obj) {
+    if (!obj || typeof obj !== "object" || Array.isArray(obj)) return null;
+    const path = pickFirstField(obj, PATH_KEYS);
+    if (typeof path === "string") return prettyText(path);
+    return null;
+  }
+
+  function normalizeIdentifierLike(obj) {
+    if (!obj || typeof obj !== "object" || Array.isArray(obj)) return null;
+    const idVal = pickFirstField(obj, ID_KEYS);
+    if (typeof idVal === "string" || typeof idVal === "number") {
+      return prettyText(String(idVal));
+    }
+    return null;
+  }
+
+  function normalizeArray(arr) {
+    if (!Array.isArray(arr)) return arr;
+    if (arr.length === 0) return [];
+
+    const normalized = arr.map((item) => normalizeValue(item));
+    const allStrings = normalized.every((v) => typeof v === "string");
+    if (allStrings) return normalized;
+
+    const tagStrings = arr
+      .map((item) => normalizeTagLike(item))
+      .filter((v) => typeof v === "string");
+    if (tagStrings.length === arr.length) return tagStrings;
+
+    const pathStrings = arr
+      .map((item) => normalizePathLike(item))
+      .filter((v) => typeof v === "string");
+    if (pathStrings.length === arr.length) return pathStrings;
+
+    return normalized;
+  }
+
+  function normalizeObject(obj) {
+    if (!obj || typeof obj !== "object" || Array.isArray(obj)) return obj;
+
+    const unwrapped = unwrapWrapperObject(obj);
+    if (unwrapped !== obj) return normalizeValue(unwrapped);
+
+    const tag = normalizeTagLike(obj);
+    if (tag != null) return tag;
+
+    const path = normalizePathLike(obj);
+    if (path != null) return path;
+
+    const id = normalizeIdentifierLike(obj);
+    if (id != null && Object.keys(obj).length <= 2) return id;
+
+    const out = {};
+    for (const [k, v] of Object.entries(obj)) {
+      const normalized = normalizeValue(v);
+      if (normalized == null || normalized === "") continue;
+      out[k] = normalized;
+    }
+    return out;
+  }
+
+  function normalizeValue(value) {
+    if (value == null) return value;
+    if (typeof value === "string") return prettyText(value);
+    if (typeof value === "number" || typeof value === "boolean") return value;
+    if (Array.isArray(value)) return normalizeArray(value);
+    if (typeof value === "object") return normalizeObject(value);
+    return value;
+  }
+
+  function formatInlineArray(arr) {
+    if (!Array.isArray(arr)) return "";
+    const slice = arr.slice(0, MAX_ARRAY_INLINE);
+    const rendered = slice.map((v) => (typeof v === "string" ? v : String(v)));
+    const suffix = arr.length > MAX_ARRAY_INLINE ? ` … +${arr.length - MAX_ARRAY_INLINE}` : "";
+    return rendered.join(", ") + suffix;
+  }
+
+  function formatValue(value) {
+    const normalized = normalizeValue(value);
+    if (normalized == null) return "";
+    if (typeof normalized === "string") return normalized;
+    if (typeof normalized === "number" || typeof normalized === "boolean") return String(normalized);
+    if (Array.isArray(normalized)) {
+      const allStrings = normalized.every((v) => typeof v === "string");
+      if (allStrings && normalized.length <= MAX_ARRAY_INLINE) return formatInlineArray(normalized);
+      if (allStrings) return `${normalized.length} items: ${formatInlineArray(normalized)}`;
+      return `Array(${normalized.length})`;
+    }
+    if (typeof normalized === "object") {
+      const keys = Object.keys(normalized);
+      if (keys.length === 0) return "—";
+      if (keys.length <= 3) {
+        const parts = keys.map((k) => `${k}: ${formatValue(normalized[k])}`);
+        return parts.join(" • ");
+      }
+      return `Object (${keys.length} keys)`;
+    }
+    return String(normalized);
+  }
+
+  function isNoiseKey(key) {
+    if (!key) return false;
+    if (key.startsWith("_")) return true;
+    return NOISE_KEYS.has(key.toLowerCase());
+  }
+
+  function loadHiddenFieldsPreference() {
+    try {
+      const raw = localStorage.getItem(HIDDEN_FIELDS_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return;
+      for (const [k, v] of Object.entries(parsed)) {
+        state.hiddenFieldsByDataset.set(k, Boolean(v));
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  function saveHiddenFieldsPreference() {
+    try {
+      const obj = {};
+      for (const [k, v] of state.hiddenFieldsByDataset.entries()) {
+        obj[k] = Boolean(v);
+      }
+      localStorage.setItem(HIDDEN_FIELDS_STORAGE_KEY, JSON.stringify(obj));
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  function getShowHiddenForDataset(datasetKey) {
+    return state.hiddenFieldsByDataset.get(datasetKey) ?? false;
+  }
+
+  function setShowHiddenForDataset(datasetKey, value) {
+    state.hiddenFieldsByDataset.set(datasetKey, Boolean(value));
+    saveHiddenFieldsPreference();
+  }
+
+  function syncShowHiddenToggle(datasetKey) {
+    const toggle = $("#showHiddenToggle");
+    if (!toggle) return;
+    toggle.checked = datasetKey ? getShowHiddenForDataset(datasetKey) : false;
   }
 
   function getRecordLabel(ds, id, record) {
@@ -493,34 +692,61 @@
       el("div", { style: "color: var(--muted); font-size:12px;" }, id)
     ));
 
+    const normalizedRecord = normalizeValue(record);
+    const showHidden = getShowHiddenForDataset(dsKey);
+    const isPrimitive = (v) => v == null || typeof v === "string" || typeof v === "number" || typeof v === "boolean";
     // Readable top-level view
     if (record && typeof record === "object" && !Array.isArray(record)) {
       const keys = Object.keys(record).sort((a,b) => a.localeCompare(b));
-      for (const k of keys) {
+      const visibleKeys = keys.filter((k) => showHidden || !isNoiseKey(k));
+      const primaryKeys = visibleKeys.filter((k) => !isNoiseKey(k) && isPrimitive(record[k]));
+      const primaryKeySet = new Set(primaryKeys);
+
+      for (const k of primaryKeys) {
         const v = record[k];
         if (v == null) continue;
+        host.appendChild(el("div", { class: "kv" },
+          el("div", { class: "k" }, k),
+          el("div", { class: "v" }, formatValue(v))
+        ));
+      }
 
-        if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
-          host.appendChild(el("div", { class: "kv" },
-            el("div", { class: "k" }, k),
-            el("div", { class: "v" }, valueToShortString(v))
-          ));
-          continue;
-        }
+      const secondaryObjectKeys = [];
+      const secondaryPrimitiveKeys = [];
+      for (const k of visibleKeys) {
+        if (primaryKeySet.has(k)) continue;
+        const v = record[k];
+        if (v == null) continue;
+        if (isPrimitive(v)) secondaryPrimitiveKeys.push(k);
+        else secondaryObjectKeys.push(k);
+      }
 
-        // objects/arrays: show expandable JSON per field
-        const summaryLabel = Array.isArray(v) ? `${k} (array[${v.length}])` : `${k} (object)`;
+      for (const k of secondaryObjectKeys) {
+        const v = record[k];
+        const summaryValue = formatValue(v);
+        const summaryLabel = Array.isArray(v)
+          ? `${k} (array[${v.length}])${summaryValue ? ` — ${summaryValue}` : ""}`
+          : `${k} (object)${summaryValue ? ` — ${summaryValue}` : ""}`;
+        const normalizedValue = normalizedRecord && typeof normalizedRecord === "object" ? normalizedRecord[k] : normalizeValue(v);
         const d = el("details", { class: "details-block" },
           el("summary", {}, summaryLabel),
-          el("pre", {}, safeJson(v))
+          el("pre", {}, safeJson(normalizedValue))
         );
         host.appendChild(d);
+      }
+
+      for (const k of secondaryPrimitiveKeys) {
+        const v = record[k];
+        host.appendChild(el("div", { class: "kv" },
+          el("div", { class: "k" }, k),
+          el("div", { class: "v" }, formatValue(v))
+        ));
       }
     } else {
       // record is array or primitive
       host.appendChild(el("details", { class: "details-block", open: true },
         el("summary", {}, "Value"),
-        el("pre", {}, safeJson(record))
+        el("pre", {}, safeJson(normalizedRecord))
       ));
     }
 
@@ -564,6 +790,7 @@
   async function selectDataset(datasetKey) {
     state.currentDatasetKey = datasetKey;
     state.selectedId = null;
+    syncShowHiddenToggle(datasetKey);
 
     $("#searchInput").disabled = true;
     $("#clearSearchBtn").disabled = true;
@@ -655,8 +882,18 @@
     $("#resultsList").addEventListener("click", onResultsClick);
     $("#searchInput").addEventListener("input", onSearchInput);
     $("#clearSearchBtn").addEventListener("click", onClearSearch);
+    const showHiddenToggle = $("#showHiddenToggle");
+    if (showHiddenToggle) {
+      showHiddenToggle.addEventListener("change", (ev) => {
+        if (!state.currentDatasetKey) return;
+        setShowHiddenForDataset(state.currentDatasetKey, ev.target.checked);
+        renderDetails();
+      });
+    }
 
     renderMapPanel();
+    loadHiddenFieldsPreference();
+    syncShowHiddenToggle(state.currentDatasetKey);
 
     try {
       await loadIndex();

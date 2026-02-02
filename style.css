@@ -96,6 +96,12 @@ body{
   border-bottom: 1px solid var(--border);
   background: rgba(255,255,255,0.02);
 }
+.details-header{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 .panel-title{
   font-weight: 700;
 }
@@ -103,6 +109,24 @@ body{
   color: var(--muted);
   font-size: 12px;
   margin-top: 3px;
+}
+
+.details-controls{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.toggle{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+.toggle input{
+  accent-color: var(--accent);
 }
 
 .dataset-list, .results-list{
