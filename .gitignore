@@ -1,0 +1,29 @@
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp
+*.bak
+*.log
+
+# Dependencies (even if framework-free)
+node_modules/
+
+# Raw exports / dumps / exporter artifacts
+raw_dump/
+raw_exports/
+exports/
+exporter_artifacts/
+exporter_output/
+export-output/
+_export/
+_out/
+temp/
+scratch/
+
+# Big local-only files
+*.sqlite
+*.db
+*.7z
+*.rar
+*.zip

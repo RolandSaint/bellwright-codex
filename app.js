@@ -200,26 +200,63 @@
         ? override.detailPriorityPaths
         : base.detailPriorityPaths,
       searchPaths: Array.isArray(override.searchPaths) ? override.searchPaths : base.searchPaths,
+      hideKeys: Array.isArray(override.hideKeys) ? override.hideKeys : base.hideKeys,
     };
   }
 
-  function getPresenter(datasetKey) {
-    if (!state.presenters) return null;
-    const presenters = { ...BUILTIN_PRESENTERS, ...state.presenters };
-    const base = presenters.default || {};
-    let merged = mergePresenters(base, null);
-    const wildcards = Object.entries(presenters)
-      .filter(([key]) => key.endsWith("*") && key !== "default")
-      .map(([key, value]) => ({ prefix: key.slice(0, -1), value }))
-      .filter((entry) => datasetKey.startsWith(entry.prefix))
-      .sort((a, b) => a.prefix.length - b.prefix.length);
+  function normalizePresenters(raw) {
+    const defaults = raw?.defaults || raw?.default || {};
+    const datasets = raw?.datasets && typeof raw.datasets === "object" ? raw.datasets : {};
+    const presenters = Array.isArray(raw?.presenters) ? raw.presenters : [];
+    return { defaults, datasets, presenters };
+  }
 
-    for (const entry of wildcards) {
-      merged = mergePresenters(merged, entry.value);
+  function isWildcardMatch(pattern, datasetKey) {
+    if (typeof pattern !== "string") return false;
+    if (!pattern.includes("*")) return pattern === datasetKey;
+    if (pattern.endsWith("*")) {
+      const prefix = pattern.slice(0, -1);
+      return datasetKey.startsWith(prefix);
+    }
+    return false;
+  }
+
+  function getPresenter(datasetKey) {
+    const normalized = normalizePresenters(state.presenters);
+    const base = normalized.defaults || {};
+    let merged = mergePresenters(base, null);
+
+    const datasetEntries = Object.entries({
+      ...BUILTIN_PRESENTERS,
+      ...normalized.datasets,
+    });
+
+    const patternMatches = [];
+    for (const [pattern, config] of datasetEntries) {
+      if (!pattern.includes("*")) continue;
+      if (!isWildcardMatch(pattern, datasetKey)) continue;
+      const prefix = pattern.slice(0, -1);
+      patternMatches.push({ prefix, config });
+    }
+    for (const presenter of normalized.presenters) {
+      if (!presenter?.match || !presenter.match.includes("*")) continue;
+      if (!isWildcardMatch(presenter.match, datasetKey)) continue;
+      const prefix = presenter.match.slice(0, -1);
+      patternMatches.push({ prefix, config: presenter });
+    }
+    patternMatches.sort((a, b) => a.prefix.length - b.prefix.length);
+    for (const match of patternMatches) {
+      merged = mergePresenters(merged, match.config);
     }
 
-    const exact = presenters[datasetKey];
-    merged = mergePresenters(merged, exact);
+    const exactMatches = [];
+    if (normalized.datasets?.[datasetKey]) exactMatches.push(normalized.datasets[datasetKey]);
+    for (const presenter of normalized.presenters) {
+      if (presenter?.match === datasetKey) exactMatches.push(presenter);
+    }
+    for (const match of exactMatches) {
+      merged = mergePresenters(merged, match);
+    }
     return merged;
   }
 
@@ -883,19 +920,25 @@
     return true;
   }
 
-  function isNoiseKey(key) {
-    if (!key) return false;
-    if (key.startsWith("_")) return true;
-    return NOISE_KEYS.has(key.toLowerCase());
+  function getPresenterHideKeys(presenter) {
+    if (!presenter || !Array.isArray(presenter.hideKeys)) return [];
+    return presenter.hideKeys.map((k) => String(k).toLowerCase());
   }
 
-  function renderGenericDetails(host, record, normalizedRecord, showHidden) {
+  function isNoiseKey(key, presenterHideKeys = []) {
+    if (!key) return false;
+    if (key.startsWith("_")) return true;
+    const lower = key.toLowerCase();
+    return NOISE_KEYS.has(lower) || presenterHideKeys.includes(lower);
+  }
+
+  function renderGenericDetails(host, record, normalizedRecord, showHidden, presenterHideKeys = []) {
     const isPrimitive = (v) => v == null || typeof v === "string" || typeof v === "number" || typeof v === "boolean";
 
     if (record && typeof record === "object" && !Array.isArray(record)) {
       const keys = Object.keys(record).sort((a,b) => a.localeCompare(b));
-      const visibleKeys = keys.filter((k) => showHidden || !isNoiseKey(k));
-      const primaryKeys = visibleKeys.filter((k) => !isNoiseKey(k) && isPrimitive(record[k]));
+      const visibleKeys = keys.filter((k) => showHidden || !isNoiseKey(k, presenterHideKeys));
+      const primaryKeys = visibleKeys.filter((k) => !isNoiseKey(k, presenterHideKeys) && isPrimitive(record[k]));
       const primaryKeySet = new Set(primaryKeys);
 
       for (const k of primaryKeys) {
@@ -1128,6 +1171,28 @@
     state.index = idx;
     setStatus(`Index loaded. ${Object.keys(idx.datasets).length} dataset keys available.`);
     return idx;
+  }
+
+  async function loadPresenters() {
+    try {
+      const res = await fetch(PRESENTERS_URL, { cache: "no-store" });
+      if (res.status === 404) {
+        toast("Presenters not found — using defaults", PRESENTERS_URL, "info");
+        return null;
+      }
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      const json = await res.json();
+      if (!json || typeof json !== "object") {
+        toast("Presenters not found — using defaults", PRESENTERS_URL, "info");
+        return null;
+      }
+      state.presenters = json;
+      toast("Presenters loaded", PRESENTERS_URL, "ok");
+      return json;
+    } catch {
+      toast("Presenters not found — using defaults", PRESENTERS_URL, "info");
+      return null;
+    }
   }
 
   async function loadPresenters() {
@@ -1368,10 +1433,11 @@
 
     const normalizedRecord = normalizeValueForDisplay(record);
     const showHidden = getShowHiddenForDataset(dsKey);
+    const presenterHideKeys = getPresenterHideKeys(ds.presenter);
     const usedPresenter = renderPresenterSections(host, record, ds.presenter, showHidden);
     const usedAdapter = usedPresenter ? true : renderAdapterSections(host, record, ds.adapter, showHidden);
     if (!usedAdapter) {
-      renderGenericDetails(host, record, normalizedRecord, showHidden);
+      renderGenericDetails(host, record, normalizedRecord, showHidden, presenterHideKeys);
     }
 
     // Raw JSON view
