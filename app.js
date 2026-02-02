@@ -5,6 +5,7 @@
   const DATA_ROOT = "data/";                // where index.json lives
   const INDEX_URL = `${DATA_ROOT}index.json`;
   const MAP_URL = "assets/map.jpg";
+  const PRESENTERS_URL = `${DATA_ROOT}presenters.json`;
   const MAX_RESULTS_RENDER = 500;
 
   // ---- State ----------------------------------------------------------------
@@ -18,6 +19,7 @@
     selectedId: null,
     hiddenFieldsByDataset: new Map(),
     datasetInspectorCache: new Map(),
+    presenters: null,
   };
 
   // ---- DOM helpers ----------------------------------------------------------
@@ -164,6 +166,37 @@
     return null;
   }
 
+  function mergePresenters(base, override) {
+    if (!override) return { ...base };
+    return {
+      ...base,
+      ...override,
+      titleFields: Array.isArray(override.titleFields) ? override.titleFields : base.titleFields,
+      statsFields: Array.isArray(override.statsFields) ? override.statsFields : base.statsFields,
+      sections: Array.isArray(override.sections) ? override.sections : base.sections,
+    };
+  }
+
+  function getPresenter(datasetKey) {
+    if (!state.presenters) return null;
+    const presenters = state.presenters;
+    const base = presenters.default || {};
+    let merged = mergePresenters(base, null);
+    const wildcards = Object.entries(presenters)
+      .filter(([key]) => key.endsWith("*") && key !== "default")
+      .map(([key, value]) => ({ prefix: key.slice(0, -1), value }))
+      .filter((entry) => datasetKey.startsWith(entry.prefix))
+      .sort((a, b) => a.prefix.length - b.prefix.length);
+
+    for (const entry of wildcards) {
+      merged = mergePresenters(merged, entry.value);
+    }
+
+    const exact = presenters[datasetKey];
+    merged = mergePresenters(merged, exact);
+    return merged;
+  }
+
   // ---- Dataset adapters -----------------------------------------------------
   const ADAPTERS = new Map([
     ["items", {
@@ -230,6 +263,32 @@
     return out.length ? out : null;
   }
 
+  function getPresenterTitle(record, presenter) {
+    if (!presenter) return null;
+    if (Array.isArray(presenter.titleFields)) {
+      const raw = pickFirstField(record, presenter.titleFields);
+      if (raw != null && raw !== "") return raw;
+    }
+    return null;
+  }
+
+  function getPresenterStats(record, presenter) {
+    if (!presenter) return null;
+    if (Array.isArray(presenter.statsFields)) {
+      return buildStatList(record, presenter.statsFields);
+    }
+    return null;
+  }
+
+  function getPresenterSections(record, presenter) {
+    if (!presenter || !Array.isArray(presenter.sections)) return null;
+    return presenter.sections.map((section) => {
+      if (!section || !section.title) return null;
+      const data = pickFirstField(record, section.fields || []);
+      return buildSection(section.title, data);
+    }).filter(Boolean);
+  }
+
   function valueToShortString(v) {
     if (v == null) return "";
     if (typeof v === "string") return String(prettyText(v));
@@ -250,6 +309,8 @@
   const TAG_KEYS = ["Tag", "Tags", "tag", "tags"];
   const PATH_KEYS = ["Path", "path", "AssetPath", "AssetPathName", "ObjectPath"];
   const MAX_ARRAY_INLINE = 12;
+  const MAX_DISPLAY_DEPTH = 5;
+  const MAX_DISPLAY_ARRAY_INLINE = 8;
   const HIDDEN_FIELDS_STORAGE_KEY = "bellwright.details.showHiddenByDataset";
   const NOISE_KEYS = new Set([
     "class",
@@ -362,6 +423,55 @@
     if (Array.isArray(value)) return normalizeArray(value);
     if (typeof value === "object") return normalizeObject(value);
     return value;
+  }
+
+  function normalizeValueForDisplay(value, depth = 0) {
+    if (value == null) return value;
+    if (depth >= MAX_DISPLAY_DEPTH) return value;
+    if (typeof value === "string") return prettyText(value);
+    if (typeof value === "number" || typeof value === "boolean") return value;
+    if (Array.isArray(value)) {
+      const normalized = value.map((item) => normalizeValueForDisplay(item, depth + 1));
+      return normalized;
+    }
+    if (typeof value === "object") {
+      const unwrapped = unwrapWrapperObject(value);
+      if (unwrapped !== value) return normalizeValueForDisplay(unwrapped, depth + 1);
+      const out = {};
+      for (const [k, v] of Object.entries(value)) {
+        const normalized = normalizeValueForDisplay(v, depth + 1);
+        if (normalized == null || normalized === "") continue;
+        out[k] = normalized;
+      }
+      return out;
+    }
+    return value;
+  }
+
+  function formatDisplayValue(value) {
+    const normalized = normalizeValueForDisplay(value);
+    const isPrimitive = (v) => v == null || typeof v === "string" || typeof v === "number" || typeof v === "boolean";
+    if (isPrimitive(normalized)) return formatValue(normalized);
+
+    if (Array.isArray(normalized)) {
+      const allPrimitives = normalized.every(isPrimitive);
+      if (allPrimitives) {
+        const shown = normalized.slice(0, MAX_DISPLAY_ARRAY_INLINE).map((v) => formatValue(v));
+        const suffix = normalized.length > MAX_DISPLAY_ARRAY_INLINE ? ` … +${normalized.length - MAX_DISPLAY_ARRAY_INLINE}` : "";
+        return `${shown.join(", ")}${suffix}`;
+      }
+      return `Array(${normalized.length})`;
+    }
+
+    if (typeof normalized === "object") {
+      const keys = Object.keys(normalized);
+      const primitiveKeys = keys.filter((key) => isPrimitive(normalized[key]));
+      if (primitiveKeys.length > 0 && primitiveKeys.length <= 3 && primitiveKeys.length === keys.length) {
+        return primitiveKeys.map((key) => `${key}: ${formatValue(normalized[key])}`).join(" • ");
+      }
+      return `Object (${keys.length} keys)`;
+    }
+    return formatValue(normalized);
   }
 
   function formatInlineArray(arr) {
@@ -537,7 +647,7 @@
   }
 
   function renderSectionContent(data) {
-    const normalized = normalizeValue(data);
+    const normalized = normalizeValueForDisplay(data);
     const isPrimitive = (v) => v == null || typeof v === "string" || typeof v === "number" || typeof v === "boolean";
 
     if (isPrimitive(normalized)) {
@@ -547,15 +657,23 @@
     if (Array.isArray(normalized)) {
       const allStrings = normalized.every((v) => typeof v === "string");
       if (allStrings) {
-        return el("div", { class: "section-value" }, normalized.join(", "));
+        const shown = normalized.slice(0, MAX_DISPLAY_ARRAY_INLINE);
+        const suffix = normalized.length > MAX_DISPLAY_ARRAY_INLINE ? ` … +${normalized.length - MAX_DISPLAY_ARRAY_INLINE}` : "";
+        return el("div", { class: "section-value" }, `${shown.join(", ")}${suffix}`);
       }
       return el("pre", {}, safeJson(normalized));
     }
 
     if (typeof normalized === "object") {
+      const keys = Object.keys(normalized);
+      const primitiveKeys = keys.filter((key) => isPrimitive(normalized[key]));
+      if (primitiveKeys.length > 0 && primitiveKeys.length <= 3 && primitiveKeys.length === keys.length) {
+        const inline = primitiveKeys.map((key) => `${key}: ${formatValue(normalized[key])}`).join(" • ");
+        return el("div", { class: "section-value" }, inline);
+      }
       const container = el("div", { class: "section-object" });
-      const keys = Object.keys(normalized).sort((a, b) => a.localeCompare(b));
-      for (const key of keys) {
+      const orderedKeys = keys.sort((a, b) => a.localeCompare(b));
+      for (const key of orderedKeys) {
         const value = normalized[key];
         if (isPrimitive(value)) {
           container.appendChild(el("div", { class: "kv" },
@@ -593,7 +711,28 @@
     if (showHidden) {
       host.appendChild(el("details", { class: "details-block" },
         el("summary", {}, "All Fields"),
-        el("pre", {}, safeJson(normalizeValue(record)))
+        el("pre", {}, safeJson(normalizeValueForDisplay(record)))
+      ));
+    }
+    return true;
+  }
+
+  function renderPresenterSections(host, record, presenter, showHidden) {
+    const sections = getPresenterSections(record, presenter);
+    if (!sections || sections.length === 0) return false;
+
+    for (const section of sections) {
+      const block = el("details", { class: "details-block", open: true },
+        el("summary", {}, section.title),
+        renderSectionContent(section.data)
+      );
+      host.appendChild(block);
+    }
+
+    if (showHidden) {
+      host.appendChild(el("details", { class: "details-block" },
+        el("summary", {}, "All Fields"),
+        el("pre", {}, safeJson(normalizeValueForDisplay(record)))
       ));
     }
     return true;
@@ -635,11 +774,13 @@
 
       for (const k of secondaryObjectKeys) {
         const v = record[k];
-        const summaryValue = formatValue(v);
+        const summaryValue = formatDisplayValue(v);
         const summaryLabel = Array.isArray(v)
           ? `${k} (array[${v.length}])${summaryValue ? ` — ${summaryValue}` : ""}`
           : `${k} (object)${summaryValue ? ` — ${summaryValue}` : ""}`;
-        const normalizedValue = normalizedRecord && typeof normalizedRecord === "object" ? normalizedRecord[k] : normalizeValue(v);
+        const normalizedValue = normalizedRecord && typeof normalizedRecord === "object"
+          ? normalizedRecord[k]
+          : normalizeValueForDisplay(v);
         const d = el("details", { class: "details-block" },
           el("summary", {}, summaryLabel),
           el("pre", {}, safeJson(normalizedValue))
@@ -709,12 +850,17 @@
     if (ds.labelCache.has(id)) return ds.labelCache.get(id);
 
     let label = "";
-    const adapterTitle = ds.adapter?.getTitle?.(record, id);
-    if (adapterTitle != null && adapterTitle !== "") {
-      label = valueToShortString(adapterTitle);
+    const presenterTitle = getPresenterTitle(record, ds.presenter);
+    if (presenterTitle != null && presenterTitle !== "") {
+      label = valueToShortString(presenterTitle);
     } else {
-      const raw = pickFirstField(record, NAME_FIELDS);
-      if (raw != null) label = valueToShortString(raw);
+      const adapterTitle = ds.adapter?.getTitle?.(record, id);
+      if (adapterTitle != null && adapterTitle !== "") {
+        label = valueToShortString(adapterTitle);
+      } else {
+        const raw = pickFirstField(record, NAME_FIELDS);
+        if (raw != null) label = valueToShortString(raw);
+      }
     }
     if (!label) label = String(id);
 
@@ -746,6 +892,13 @@
   }
 
   function getRecordStatsSummary(ds, record) {
+    const presenterStats = getPresenterStats(record, ds.presenter);
+    if (presenterStats) {
+      const parts = presenterStats
+        .map((entry) => `${entry.label}: ${valueToShortString(entry.value)}`)
+        .filter(Boolean);
+      if (parts.length) return parts.slice(0, 2).join(" • ");
+    }
     const adapterStats = ds.adapter?.getStats?.(record);
     if (adapterStats) {
       if (typeof adapterStats === "string") return adapterStats;
@@ -831,6 +984,20 @@
     return idx;
   }
 
+  async function loadPresenters() {
+    try {
+      const res = await fetch(PRESENTERS_URL, { cache: "no-store" });
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      const json = await res.json();
+      if (!json || typeof json !== "object") return null;
+      state.presenters = json;
+      return json;
+    } catch {
+      return null;
+    }
+  }
+
   function parseChunkRecords(json) {
     const arr = Array.isArray(json?.records) ? json.records : [];
     const parsed = [];
@@ -864,7 +1031,7 @@
 
       if (chunks.length === 0) {
         // dataset exists but has no chunk files (valid per your constraints)
-        const ds = { key: datasetKey, meta, recordsMap, loadErrors, labelCache: new Map(), hayCache: new Map(), adapter: getAdapterForDataset(datasetKey) };
+        const ds = { key: datasetKey, meta, recordsMap, loadErrors, labelCache: new Map(), hayCache: new Map(), adapter: getAdapterForDataset(datasetKey), presenter: getPresenter(datasetKey) };
         state.datasetCache.set(datasetKey, ds);
         return ds;
       }
@@ -890,7 +1057,7 @@
         }
       }
 
-      const ds = { key: datasetKey, meta, recordsMap, loadErrors, labelCache: new Map(), hayCache: new Map(), adapter: getAdapterForDataset(datasetKey) };
+      const ds = { key: datasetKey, meta, recordsMap, loadErrors, labelCache: new Map(), hayCache: new Map(), adapter: getAdapterForDataset(datasetKey), presenter: getPresenter(datasetKey) };
       state.datasetCache.set(datasetKey, ds);
       return ds;
     })();
@@ -1039,9 +1206,10 @@
       el("div", { style: "color: var(--muted); font-size:12px;" }, id)
     ));
 
-    const normalizedRecord = normalizeValue(record);
+    const normalizedRecord = normalizeValueForDisplay(record);
     const showHidden = getShowHiddenForDataset(dsKey);
-    const usedAdapter = renderAdapterSections(host, record, ds.adapter, showHidden);
+    const usedPresenter = renderPresenterSections(host, record, ds.presenter, showHidden);
+    const usedAdapter = usedPresenter ? true : renderAdapterSections(host, record, ds.adapter, showHidden);
     if (!usedAdapter) {
       renderGenericDetails(host, record, normalizedRecord, showHidden);
     }
@@ -1194,6 +1362,7 @@
 
     try {
       await loadIndex();
+      await loadPresenters();
       renderDatasetList();
       renderResults();
       renderDetails();
