@@ -181,16 +181,19 @@
     if (!state.presenters) return null;
     const presenters = state.presenters;
     const base = presenters.default || {};
-    const exact = presenters[datasetKey];
-    let merged = mergePresenters(base, exact);
+    let merged = mergePresenters(base, null);
+    const wildcards = Object.entries(presenters)
+      .filter(([key]) => key.endsWith("*") && key !== "default")
+      .map(([key, value]) => ({ prefix: key.slice(0, -1), value }))
+      .filter((entry) => datasetKey.startsWith(entry.prefix))
+      .sort((a, b) => a.prefix.length - b.prefix.length);
 
-    for (const [key, value] of Object.entries(presenters)) {
-      if (!key.endsWith("*") || key === "default") continue;
-      const prefix = key.slice(0, -1);
-      if (datasetKey.startsWith(prefix)) {
-        merged = mergePresenters(merged, value);
-      }
+    for (const entry of wildcards) {
+      merged = mergePresenters(merged, entry.value);
     }
+
+    const exact = presenters[datasetKey];
+    merged = mergePresenters(merged, exact);
     return merged;
   }
 
