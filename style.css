@@ -1,0 +1,299 @@
+:root{
+  --bg: #0b0c10;
+  --panel: #11131a;
+  --panel2: #0f1117;
+  --border: #222633;
+  --text: #e7e9ee;
+  --muted: #aab1c2;
+  --accent: #7aa2ff;
+  --danger: #ff6b6b;
+  --ok: #6bffb3;
+  --shadow: rgba(0,0,0,0.35);
+}
+
+*{ box-sizing: border-box; }
+html, body{ height: 100%; }
+body{
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  color: var(--text);
+  background: radial-gradient(1200px 700px at 20% 0%, #121528 0%, var(--bg) 55%);
+}
+
+.topbar{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, #0f1220 0%, #0c0e15 100%);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.brand-title{
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+.brand-sub{
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.searchbox{
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 360px;
+  max-width: 520px;
+  width: 42vw;
+}
+.searchbox input{
+  flex: 1;
+  padding: 10px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #0b0d14;
+  color: var(--text);
+  outline: none;
+}
+.searchbox input:disabled{ opacity: 0.6; }
+
+.btn{
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #0b0d14;
+  color: var(--text);
+  cursor: pointer;
+}
+.btn:disabled{ opacity: 0.6; cursor: not-allowed; }
+
+.layout{
+  display: grid;
+  grid-template-columns: 290px 420px 1fr;
+  gap: 12px;
+  padding: 12px;
+  height: calc(100vh - 58px);
+}
+
+.sidebar, .results, .details{
+  background: linear-gradient(180deg, var(--panel) 0%, var(--panel2) 100%);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 10px 30px var(--shadow);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.panel-header{
+  padding: 12px 12px 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,0.02);
+}
+.panel-title{
+  font-weight: 700;
+}
+.panel-sub{
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.dataset-list, .results-list{
+  overflow: auto;
+  padding: 10px;
+  min-height: 0;
+}
+
+.group{
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.02);
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+.group summary{
+  cursor: pointer;
+  padding: 10px 10px;
+  user-select: none;
+  font-weight: 650;
+}
+.group summary span{
+  color: var(--muted);
+  font-weight: 500;
+  margin-left: 8px;
+  font-size: 12px;
+}
+
+.dataset-btn{
+  width: 100%;
+  text-align: left;
+  padding: 10px 10px;
+  border: none;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: baseline;
+}
+.dataset-btn:hover{ background: rgba(122,162,255,0.08); }
+.dataset-btn.is-selected{ background: rgba(122,162,255,0.14); }
+.dataset-btn.is-empty{ opacity: 0.72; }
+.dataset-key{ font-weight: 650; }
+.dataset-meta{
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.results-item{
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 10px;
+  background: rgba(255,255,255,0.02);
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+.results-item:hover{ border-color: rgba(122,162,255,0.6); }
+.results-item.is-selected{
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(122,162,255,0.25) inset;
+}
+.results-title{
+  font-weight: 650;
+}
+.results-sub{
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.details-body{
+  padding: 12px;
+  overflow: auto;
+  min-height: 0;
+}
+
+.placeholder{
+  color: var(--muted);
+  padding: 14px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.02);
+}
+.placeholder.subtle{
+  border-style: solid;
+  border-color: rgba(255,255,255,0.06);
+  padding: 10px;
+}
+
+.kv{
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.kv .k{
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.kv .v{
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.details-block{
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(255,255,255,0.02);
+  margin: 12px 0;
+}
+.details-block > summary{
+  cursor: pointer;
+  user-select: none;
+  font-weight: 650;
+}
+pre{
+  margin: 10px 0 0 0;
+  padding: 10px;
+  border-radius: 10px;
+  background: #0b0d14;
+  border: 1px solid var(--border);
+  overflow: auto;
+  max-height: 420px;
+  color: #e8ebf2;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.map-panel{
+  border-top: 1px solid var(--border);
+  background: rgba(255,255,255,0.02);
+}
+.map-panel summary{
+  padding: 10px 12px;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 650;
+}
+.map-body{
+  padding: 10px 12px 12px 12px;
+}
+.map-body img{
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #0b0d14;
+}
+
+.toast-host{
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  display: grid;
+  gap: 10px;
+  z-index: 50;
+  max-width: min(520px, 92vw);
+}
+.toast{
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(17,19,26,0.95);
+  padding: 10px 12px;
+  box-shadow: 0 10px 30px var(--shadow);
+  cursor: pointer;
+}
+.toast .t-title{
+  font-weight: 650;
+  margin-bottom: 3px;
+}
+.toast .t-msg{
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.toast.error{ border-color: rgba(255,107,107,0.55); }
+.toast.ok{ border-color: rgba(107,255,179,0.45); }
+
+@media (max-width: 1100px){
+  .layout{ grid-template-columns: 280px 1fr; grid-template-rows: 1fr 1fr; }
+  .details{ grid-column: 1 / -1; }
+}
+@media (max-width: 720px){
+  .topbar{ flex-direction: column; align-items: stretch; }
+  .searchbox{ width: 100%; min-width: 0; }
+  .layout{ grid-template-columns: 1fr; height: auto; }
+}

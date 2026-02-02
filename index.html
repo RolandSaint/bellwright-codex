@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bellwright Codex</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-title">Bellwright Codex</div>
+      <div class="brand-sub" id="statusText">Loading index…</div>
+    </div>
+
+    <div class="searchbox">
+      <input id="searchInput" type="search" placeholder="Search current dataset…" autocomplete="off" disabled />
+      <button id="clearSearchBtn" class="btn" type="button" disabled>Clear</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <div class="panel-header">
+        <div class="panel-title">Datasets</div>
+        <div class="panel-sub" id="datasetCount">—</div>
+      </div>
+      <div id="datasetList" class="dataset-list"></div>
+    </aside>
+
+    <section class="results">
+      <div class="panel-header">
+        <div class="panel-title" id="resultsTitle">Results</div>
+        <div class="panel-sub" id="resultsMeta">Select a dataset</div>
+      </div>
+      <div id="resultsList" class="results-list"></div>
+    </section>
+
+    <section class="details">
+      <div class="panel-header">
+        <div class="panel-title">Details</div>
+        <div class="panel-sub" id="detailsMeta">—</div>
+      </div>
+
+      <div id="detailsBody" class="details-body">
+        <div class="placeholder">
+          Select a dataset on the left, then pick a record in the middle.
+        </div>
+      </div>
+
+      <details class="map-panel" id="mapPanel" open>
+        <summary>Map</summary>
+        <div id="mapBody" class="map-body">
+          <div class="placeholder subtle">Checking for assets/map.jpg…</div>
+        </div>
+      </details>
+    </section>
+  </main>
+
+  <div id="toastHost" class="toast-host" aria-live="polite" aria-atomic="true"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,381 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-02-02T03:53:55.834259+00:00",
+  "chunk_cap_mib": 20,
+  "datasets": {
+    "ui_data_assets": {
+      "chunks": [
+        {
+          "file": "datasets/ui_data_assets/ui_data_assets_000.json",
+          "records": 20,
+          "bytes": 5726,
+          "chunk": 0
+        }
+      ],
+      "records_total": 20,
+      "files_total": 1,
+      "source_kind": "assets"
+    },
+    "tutorials_assets": {
+      "chunks": [],
+      "records_total": 0,
+      "files_total": 0,
+      "source_kind": "assets"
+    },
+    "factions_assets": {
+      "chunks": [
+        {
+          "file": "datasets/factions_assets/factions_assets_000.json",
+          "records": 16,
+          "bytes": 6862,
+          "chunk": 0
+        }
+      ],
+      "records_total": 16,
+      "files_total": 1,
+      "source_kind": "assets"
+    },
+    "combat_assets": {
+      "chunks": [
+        {
+          "file": "datasets/combat_assets/combat_assets_000.json",
+          "records": 11,
+          "bytes": 6084,
+          "chunk": 0
+        }
+      ],
+      "records_total": 11,
+      "files_total": 1,
+      "source_kind": "assets"
+    },
+    "characters_cdo": {
+      "chunks": [
+        {
+          "file": "datasets/characters_cdo/characters_cdo_000.json",
+          "records": 1258,
+          "bytes": 1724795,
+          "chunk": 0
+        }
+      ],
+      "records_total": 1258,
+      "files_total": 1,
+      "source_kind": "cdo"
+    },
+    "characters_assets": {
+      "chunks": [
+        {
+          "file": "datasets/characters_assets/characters_assets_000.json",
+          "records": 106,
+          "bytes": 131587,
+          "chunk": 0
+        }
+      ],
+      "records_total": 106,
+      "files_total": 1,
+      "source_kind": "assets"
+    },
+    "weapon_types_cdo": {
+      "chunks": [
+        {
+          "file": "datasets/weapon_types_cdo/weapon_types_cdo_000.json",
+          "records": 17,
+          "bytes": 77434,
+          "chunk": 0
+        }
+      ],
+      "records_total": 17,
+      "files_total": 1,
+      "source_kind": "cdo"
+    },
+    "weapon_types_assets": {
+      "chunks": [
+        {
+          "file": "datasets/weapon_types_assets/weapon_types_assets_000.json",
+          "records": 7,
+          "bytes": 2265,
+          "chunk": 0
+        }
+      ],
+      "records_total": 7,
+      "files_total": 1,
+      "source_kind": "assets"
+    },
+    "map_data_assets": {
+      "chunks": [
+        {
+          "file": "datasets/map_data_assets/map_data_assets_000.json",
+          "records": 12,
+          "bytes": 4911,
+          "chunk": 0
+        }
+      ],
+      "records_total": 12,
+      "files_total": 1,
+      "source_kind": "assets"
+    },
+    "codex_entries_assets": {
+      "chunks": [
+        {
+          "file": "datasets/codex_entries_assets/codex_entries_assets_000.json",
+          "records": 508,
+          "bytes": 666320,
+          "chunk": 0
+        }
+      ],
+      "records_total": 508,
+      "files_total": 1,
+      "source_kind": "assets"
+    },
+    "configs_cdo": {
+      "chunks": [
+        {
+          "file": "datasets/configs_cdo/configs_cdo_000.json",
+          "records": 13,
+          "bytes": 7498,
+          "chunk": 0
+        }
+      ],
+      "records_total": 13,
+      "files_total": 1,
+      "source_kind": "cdo"
+    },
+    "configs_assets": {
+      "chunks": [
+        {
+          "file": "datasets/configs_assets/configs_assets_000.json",
+          "records": 42,
+          "bytes": 41031,
+          "chunk": 0
+        }
+      ],
+      "records_total": 42,
+      "files_total": 1,
+      "source_kind": "assets"
+    },
+    "construction_site_assets": {
+      "chunks": [
+        {
+          "file": "datasets/construction_site_assets/construction_site_assets_000.json",
+          "records": 445,
+          "bytes": 449181,
+          "chunk": 0
+        }
+      ],
+      "records_total": 445,
+      "files_total": 1,
+      "source_kind": "assets"
+    },
+    "placeables_cdo": {
+      "chunks": [
+        {
+          "file": "datasets/placeables_cdo/placeables_cdo_000.json",
+          "records": 263,
+          "bytes": 791914,
+          "chunk": 0
+        }
+      ],
+      "records_total": 263,
+      "files_total": 1,
+      "source_kind": "cdo"
+    },
+    "placeables_assets": {
+      "chunks": [],
+      "records_total": 0,
+      "files_total": 0,
+      "source_kind": "assets"
+    },
+    "tech_tree_cdo": {
+      "chunks": [
+        {
+          "file": "datasets/tech_tree_cdo/tech_tree_cdo_000.json",
+          "records": 370,
+          "bytes": 506282,
+          "chunk": 0
+        }
+      ],
+      "records_total": 370,
+      "files_total": 1,
+      "source_kind": "cdo"
+    },
+    "tech_tree_assets": {
+      "chunks": [],
+      "records_total": 0,
+      "files_total": 0,
+      "source_kind": "assets"
+    },
+    "trading_cdo": {
+      "chunks": [
+        {
+          "file": "datasets/trading_cdo/trading_cdo_000.json",
+          "records": 64,
+          "bytes": 59559,
+          "chunk": 0
+        }
+      ],
+      "records_total": 64,
+      "files_total": 1,
+      "source_kind": "cdo"
+    },
+    "trading_assets": {
+      "chunks": [
+        {
+          "file": "datasets/trading_assets/trading_assets_000.json",
+          "records": 2,
+          "bytes": 1087,
+          "chunk": 0
+        }
+      ],
+      "records_total": 2,
+      "files_total": 1,
+      "source_kind": "assets"
+    },
+    "crafting_cdo": {
+      "chunks": [
+        {
+          "file": "datasets/crafting_cdo/crafting_cdo_000.json",
+          "records": 141,
+          "bytes": 100631,
+          "chunk": 0
+        }
+      ],
+      "records_total": 141,
+      "files_total": 1,
+      "source_kind": "cdo"
+    },
+    "crafting_assets": {
+      "chunks": [
+        {
+          "file": "datasets/crafting_assets/crafting_assets_000.json",
+          "records": 1,
+          "bytes": 325,
+          "chunk": 0
+        }
+      ],
+      "records_total": 1,
+      "files_total": 1,
+      "source_kind": "assets"
+    },
+    "equipment_cdo": {
+      "chunks": [
+        {
+          "file": "datasets/equipment_cdo/equipment_cdo_000.json",
+          "records": 418,
+          "bytes": 1248107,
+          "chunk": 0
+        }
+      ],
+      "records_total": 418,
+      "files_total": 1,
+      "source_kind": "cdo"
+    },
+    "equipment_assets": {
+      "chunks": [],
+      "records_total": 0,
+      "files_total": 0,
+      "source_kind": "assets"
+    },
+    "weapons_cdo": {
+      "chunks": [
+        {
+          "file": "datasets/weapons_cdo/weapons_cdo_000.json",
+          "records": 74,
+          "bytes": 239786,
+          "chunk": 0
+        }
+      ],
+      "records_total": 74,
+      "files_total": 1,
+      "source_kind": "cdo"
+    },
+    "weapons_assets": {
+      "chunks": [],
+      "records_total": 0,
+      "files_total": 0,
+      "source_kind": "assets"
+    },
+    "items_cdo": {
+      "chunks": [
+        {
+          "file": "datasets/items_cdo/items_cdo_000.json",
+          "records": 1547,
+          "bytes": 4067666,
+          "chunk": 0
+        }
+      ],
+      "records_total": 1547,
+      "files_total": 1,
+      "source_kind": "cdo"
+    },
+    "items_assets": {
+      "chunks": [
+        {
+          "file": "datasets/items_assets/items_assets_000.json",
+          "records": 83,
+          "bytes": 24500,
+          "chunk": 0
+        }
+      ],
+      "records_total": 83,
+      "files_total": 1,
+      "source_kind": "assets"
+    },
+    "injuries_morale_cdo": {
+      "chunks": [
+        {
+          "file": "datasets/injuries_morale_cdo/injuries_morale_cdo_000.json",
+          "records": 6,
+          "bytes": 2226,
+          "chunk": 0
+        }
+      ],
+      "records_total": 6,
+      "files_total": 1,
+      "source_kind": "cdo"
+    },
+    "injuries_morale_assets": {
+      "chunks": [
+        {
+          "file": "datasets/injuries_morale_assets/injuries_morale_assets_000.json",
+          "records": 31,
+          "bytes": 24233,
+          "chunk": 0
+        }
+      ],
+      "records_total": 31,
+      "files_total": 1,
+      "source_kind": "assets"
+    },
+    "status_effects_cdo": {
+      "chunks": [
+        {
+          "file": "datasets/status_effects_cdo/status_effects_cdo_000.json",
+          "records": 151,
+          "bytes": 81437,
+          "chunk": 0
+        }
+      ],
+      "records_total": 151,
+      "files_total": 1,
+      "source_kind": "cdo"
+    },
+    "status_effects_assets": {
+      "chunks": [
+        {
+          "file": "datasets/status_effects_assets/status_effects_assets_000.json",
+          "records": 1,
+          "bytes": 2420,
+          "chunk": 0
+        }
+      ],
+      "records_total": 1,
+      "files_total": 1,
+      "source_kind": "assets"
+    },
+    "traits_assets": {
+      "chunks": [],
+      "records_total": 0,
+      "files_total": 0,
+      "source_kind": "assets"
+    }
+  }
+}
