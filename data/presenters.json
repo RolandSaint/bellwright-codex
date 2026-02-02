@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "defaults": {
+    "titlePaths": ["Name", "Title", "DisplayName", "Display_Name", "UIName", "ItemName"],
+    "searchPaths": ["Name", "Title", "DisplayName", "Description", "ShortDescription", "LongDescription"],
+    "resultStatPaths": ["Damage", "Armor", "Durability", "Weight", "Value"],
+    "hideKeys": ["Class", "Outer", "Package", "RowStruct", "ExportPath", "ObjectName"]
+  },
+  "datasets": {
+    "items_*": {
+      "resultStatPaths": ["Damage", "Armor", "Durability", "Weight", "Value"]
+    },
+    "weapons_*": {
+      "resultStatPaths": ["Damage", "Durability", "Weight", "Value"]
+    },
+    "status_effects_*": {
+      "resultStatPaths": ["Duration", "Magnitude", "Stacks"]
+    },
+    "codex_entries_*": {
+      "titlePaths": ["Title", "Name", "DisplayName"],
+      "searchPaths": ["Title", "Name", "Body", "Text", "Description"]
+    }
+  },
+  "presenters": [
+    { "match": "items_*", "resultStatPaths": ["Damage", "Armor", "Durability", "Weight", "Value"] },
+    { "match": "weapons_*", "resultStatPaths": ["Damage", "Durability", "Weight", "Value"] },
+    { "match": "status_effects_*", "resultStatPaths": ["Duration", "Magnitude", "Stacks"] },
+    { "match": "codex_entries_*", "titlePaths": ["Title", "Name", "DisplayName"], "searchPaths": ["Title", "Name", "Body", "Text", "Description"] }
+  ]
+}
