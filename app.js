@@ -1144,6 +1144,20 @@
     }
   }
 
+  async function loadPresenters() {
+    try {
+      const res = await fetch(PRESENTERS_URL, { cache: "no-store" });
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      const json = await res.json();
+      if (!json || typeof json !== "object") return null;
+      state.presenters = json;
+      return json;
+    } catch {
+      return null;
+    }
+  }
+
   function parseChunkRecords(json) {
     const arr = Array.isArray(json?.records) ? json.records : [];
     const parsed = [];
