@@ -17,6 +17,7 @@
     currentResults: [],         // [{id,label,stats}]
     selectedId: null,
     hiddenFieldsByDataset: new Map(),
+    datasetInspectorCache: new Map(),
   };
 
   // ---- DOM helpers ----------------------------------------------------------
@@ -161,6 +162,72 @@
       if (k) return obj[k];
     }
     return null;
+  }
+
+  // ---- Dataset adapters -----------------------------------------------------
+  const ADAPTERS = new Map([
+    ["items", {
+      getTitle: (record, id) => pickFirstField(record, NAME_FIELDS) ?? id,
+      getStats: (record) => buildStatList(record, ["Damage", "Armor", "Durability", "Weight", "Value"]),
+      getSections: (record) => [
+        buildSection("Stats", pickFirstField(record, ["Stats", "ItemStats", "Attributes"])),
+        buildSection("Requirements", pickFirstField(record, ["Requirements", "CraftRequirements", "CraftingRequirements"])),
+        buildSection("Effects", pickFirstField(record, ["Effects", "StatusEffects", "EffectData"])),
+      ],
+    }],
+    ["weapons", {
+      getTitle: (record, id) => pickFirstField(record, NAME_FIELDS) ?? id,
+      getStats: (record) => buildStatList(record, ["Damage", "Armor", "Durability", "Weight", "Value"]),
+      getSections: (record) => [
+        buildSection("Stats", pickFirstField(record, ["Stats", "WeaponStats", "DamageData"])),
+        buildSection("Damage", pickFirstField(record, ["Damage", "DamageType", "DamageTypeModified"])),
+        buildSection("Requirements", pickFirstField(record, ["Requirements", "CraftRequirements", "CraftingRequirements"])),
+      ],
+    }],
+    ["status_effects", {
+      getTitle: (record, id) => pickFirstField(record, NAME_FIELDS) ?? id,
+      getStats: (record) => buildStatList(record, ["Duration", "Magnitude", "StackLimit", "Stacks", "Interval"]),
+      getSections: (record) => [
+        buildSection("Effects", pickFirstField(record, ["Effects", "EffectData", "Modifiers"])),
+        buildSection("Requirements", pickFirstField(record, ["Requirements", "Stacks", "StackLimit"])),
+      ],
+    }],
+    ["traits", {
+      getTitle: (record, id) => pickFirstField(record, NAME_FIELDS) ?? id,
+      getStats: (record) => buildStatList(record, ["Value", "Bonus", "Penalty", "Magnitude"]),
+      getSections: (record) => [
+        buildSection("Effects", pickFirstField(record, ["Effects", "Modifiers", "Stats"])),
+      ],
+    }],
+    ["crafting", {
+      getTitle: (record, id) => pickFirstField(record, NAME_FIELDS) ?? id,
+      getStats: (record) => buildStatList(record, ["CraftTime", "Duration", "Value", "Weight"]),
+      getSections: (record) => [
+        buildSection("Ingredients", pickFirstField(record, ["Ingredients", "Inputs", "Requirements"])),
+        buildSection("Outputs", pickFirstField(record, ["Outputs", "Results", "Items"])),
+      ],
+    }],
+  ]);
+
+  function getAdapterForDataset(datasetKey) {
+    const group = groupNameForKey(datasetKey);
+    return ADAPTERS.get(group) || null;
+  }
+
+  function buildSection(title, data) {
+    if (data == null || data === "" || (Array.isArray(data) && data.length === 0)) return null;
+    if (typeof data === "object" && !Array.isArray(data) && Object.keys(data).length === 0) return null;
+    return { title, data };
+  }
+
+  function buildStatList(record, fields) {
+    const out = [];
+    for (const field of fields) {
+      const value = extractStatValue(record, field);
+      if (value == null || value === "") continue;
+      out.push({ label: field, value });
+    }
+    return out.length ? out : null;
   }
 
   function valueToShortString(v) {
@@ -328,10 +395,272 @@
     return String(normalized);
   }
 
+  function valueType(value) {
+    if (value == null) return "null";
+    if (Array.isArray(value)) return "array";
+    return typeof value;
+  }
+
+  function computeDatasetInspector(ds) {
+    const keyCounts = new Map();
+    const nameFields = NAME_FIELDS.map((f) => f.toLowerCase());
+    const typeHistogram = {};
+    let withName = 0;
+    const total = ds.recordsMap.size;
+
+    for (const record of ds.recordsMap.values()) {
+      if (!record || typeof record !== "object" || Array.isArray(record)) continue;
+      let hasName = false;
+      for (const [k, v] of Object.entries(record)) {
+        keyCounts.set(k, (keyCounts.get(k) || 0) + 1);
+        const keyLower = k.toLowerCase();
+        if (!hasName && nameFields.includes(keyLower)) {
+          if (v != null && valueToShortString(v)) hasName = true;
+        }
+      }
+      if (hasName) withName += 1;
+    }
+
+    const topKeys = Array.from(keyCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 30)
+      .map(([key, count]) => ({ key, count }));
+
+    const topKeySet = new Set(topKeys.map((entry) => entry.key));
+    for (const record of ds.recordsMap.values()) {
+      if (!record || typeof record !== "object" || Array.isArray(record)) continue;
+      for (const [k, v] of Object.entries(record)) {
+        if (!topKeySet.has(k)) continue;
+        const type = valueType(v);
+        if (!typeHistogram[k]) {
+          typeHistogram[k] = { string: 0, number: 0, boolean: 0, object: 0, array: 0, null: 0, other: 0 };
+        }
+        const bucket = typeHistogram[k][type] != null ? type : "other";
+        typeHistogram[k][bucket] += 1;
+      }
+    }
+
+    return {
+      dataset: ds.key,
+      total_records: total,
+      name_field_coverage_pct: total ? Math.round((withName / total) * 1000) / 10 : 0,
+      top_keys: topKeys,
+      type_histogram: typeHistogram,
+    };
+  }
+
+  function getDatasetInspector(ds) {
+    if (state.datasetInspectorCache.has(ds.key)) return state.datasetInspectorCache.get(ds.key);
+    const info = computeDatasetInspector(ds);
+    state.datasetInspectorCache.set(ds.key, info);
+    return info;
+  }
+
+  function formatInspectorText(info) {
+    const lines = [
+      `Dataset: ${info.dataset}`,
+      `Total records: ${info.total_records}`,
+      `Name coverage: ${info.name_field_coverage_pct}%`,
+      "",
+      "Top keys:",
+      ...info.top_keys.map((entry, idx) => `${idx + 1}. ${entry.key} (${entry.count})`),
+      "",
+      "Type histogram (top keys):",
+    ];
+    for (const key of Object.keys(info.type_histogram)) {
+      const buckets = info.type_histogram[key];
+      const summary = Object.entries(buckets)
+        .filter(([, count]) => count > 0)
+        .map(([type, count]) => `${type}:${count}`)
+        .join(", ");
+      lines.push(`- ${key}: ${summary}`);
+    }
+    return lines.join("\n");
+  }
+
+  async function copyInspectorSummary(info) {
+    const payload = JSON.stringify(info, null, 2);
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(payload);
+      toast("Copied", "Dataset inspector summary copied.", "ok");
+      return;
+    }
+    const textarea = el("textarea", { style: "position:fixed; left:-9999px; top:-9999px;" }, payload);
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand("copy");
+    textarea.remove();
+    toast("Copied", "Dataset inspector summary copied.", "ok");
+  }
+
+  function renderDatasetInspector(host, ds) {
+    const info = getDatasetInspector(ds);
+    const header = el("div", { class: "inspector-header" },
+      el("div", { class: "inspector-title" }, "Dataset Inspector"),
+      el("button", { class: "btn btn-compact", type: "button", onClick: () => copyInspectorSummary(info) }, "Copy summary")
+    );
+
+    const summary = el("div", { class: "inspector-summary" },
+      el("div", {}, `Records: ${info.total_records}`),
+      el("div", {}, `Name coverage: ${info.name_field_coverage_pct}%`)
+    );
+
+    const list = el("ol", { class: "inspector-list" },
+      info.top_keys.map((entry) => el("li", {}, `${entry.key} (${entry.count})`))
+    );
+
+    const histogramLines = Object.entries(info.type_histogram).map(([key, buckets]) => {
+      const summaryText = Object.entries(buckets)
+        .filter(([, count]) => count > 0)
+        .map(([type, count]) => `${type}:${count}`)
+        .join(", ");
+      return el("div", { class: "inspector-histogram-line" }, `${key}: ${summaryText}`);
+    });
+
+    const histogram = el("div", { class: "inspector-histogram" }, histogramLines);
+
+    const textPreview = el("pre", { class: "inspector-json" }, formatInspectorText(info));
+
+    const block = el("details", { class: "details-block inspector-block", open: true },
+      el("summary", {}, "Dataset Inspector"),
+      header,
+      summary,
+      el("div", { class: "inspector-section-title" }, "Top keys"),
+      list,
+      el("div", { class: "inspector-section-title" }, "Type histogram"),
+      histogram,
+      el("div", { class: "inspector-section-title" }, "Summary (copyable)"),
+      textPreview
+    );
+
+    host.appendChild(block);
+  }
+
+  function renderSectionContent(data) {
+    const normalized = normalizeValue(data);
+    const isPrimitive = (v) => v == null || typeof v === "string" || typeof v === "number" || typeof v === "boolean";
+
+    if (isPrimitive(normalized)) {
+      return el("div", { class: "section-value" }, formatValue(normalized));
+    }
+
+    if (Array.isArray(normalized)) {
+      const allStrings = normalized.every((v) => typeof v === "string");
+      if (allStrings) {
+        return el("div", { class: "section-value" }, normalized.join(", "));
+      }
+      return el("pre", {}, safeJson(normalized));
+    }
+
+    if (typeof normalized === "object") {
+      const container = el("div", { class: "section-object" });
+      const keys = Object.keys(normalized).sort((a, b) => a.localeCompare(b));
+      for (const key of keys) {
+        const value = normalized[key];
+        if (isPrimitive(value)) {
+          container.appendChild(el("div", { class: "kv" },
+            el("div", { class: "k" }, key),
+            el("div", { class: "v" }, formatValue(value))
+          ));
+        } else {
+          const detail = el("details", { class: "details-block" },
+            el("summary", {}, key),
+            el("pre", {}, safeJson(value))
+          );
+          container.appendChild(detail);
+        }
+      }
+      return container;
+    }
+
+    return el("div", { class: "section-value" }, formatValue(normalized));
+  }
+
+  function renderAdapterSections(host, record, adapter, showHidden) {
+    if (!adapter?.getSections) return false;
+    const sections = adapter.getSections(record)
+      .filter((section) => section && section.data != null);
+    if (sections.length === 0) return false;
+
+    for (const section of sections) {
+      const block = el("details", { class: "details-block", open: true },
+        el("summary", {}, section.title),
+        renderSectionContent(section.data)
+      );
+      host.appendChild(block);
+    }
+
+    if (showHidden) {
+      host.appendChild(el("details", { class: "details-block" },
+        el("summary", {}, "All Fields"),
+        el("pre", {}, safeJson(normalizeValue(record)))
+      ));
+    }
+    return true;
+  }
+
   function isNoiseKey(key) {
     if (!key) return false;
     if (key.startsWith("_")) return true;
     return NOISE_KEYS.has(key.toLowerCase());
+  }
+
+  function renderGenericDetails(host, record, normalizedRecord, showHidden) {
+    const isPrimitive = (v) => v == null || typeof v === "string" || typeof v === "number" || typeof v === "boolean";
+
+    if (record && typeof record === "object" && !Array.isArray(record)) {
+      const keys = Object.keys(record).sort((a,b) => a.localeCompare(b));
+      const visibleKeys = keys.filter((k) => showHidden || !isNoiseKey(k));
+      const primaryKeys = visibleKeys.filter((k) => !isNoiseKey(k) && isPrimitive(record[k]));
+      const primaryKeySet = new Set(primaryKeys);
+
+      for (const k of primaryKeys) {
+        const v = record[k];
+        if (v == null) continue;
+        host.appendChild(el("div", { class: "kv" },
+          el("div", { class: "k" }, k),
+          el("div", { class: "v" }, formatValue(v))
+        ));
+      }
+
+      const secondaryObjectKeys = [];
+      const secondaryPrimitiveKeys = [];
+      for (const k of visibleKeys) {
+        if (primaryKeySet.has(k)) continue;
+        const v = record[k];
+        if (v == null) continue;
+        if (isPrimitive(v)) secondaryPrimitiveKeys.push(k);
+        else secondaryObjectKeys.push(k);
+      }
+
+      for (const k of secondaryObjectKeys) {
+        const v = record[k];
+        const summaryValue = formatValue(v);
+        const summaryLabel = Array.isArray(v)
+          ? `${k} (array[${v.length}])${summaryValue ? ` — ${summaryValue}` : ""}`
+          : `${k} (object)${summaryValue ? ` — ${summaryValue}` : ""}`;
+        const normalizedValue = normalizedRecord && typeof normalizedRecord === "object" ? normalizedRecord[k] : normalizeValue(v);
+        const d = el("details", { class: "details-block" },
+          el("summary", {}, summaryLabel),
+          el("pre", {}, safeJson(normalizedValue))
+        );
+        host.appendChild(d);
+      }
+
+      for (const k of secondaryPrimitiveKeys) {
+        const v = record[k];
+        host.appendChild(el("div", { class: "kv" },
+          el("div", { class: "k" }, k),
+          el("div", { class: "v" }, formatValue(v))
+        ));
+      }
+      return;
+    }
+
+    host.appendChild(el("details", { class: "details-block", open: true },
+      el("summary", {}, "Value"),
+      el("pre", {}, safeJson(normalizedRecord))
+    ));
   }
 
   function loadHiddenFieldsPreference() {
@@ -380,8 +709,13 @@
     if (ds.labelCache.has(id)) return ds.labelCache.get(id);
 
     let label = "";
-    const raw = pickFirstField(record, NAME_FIELDS);
-    if (raw != null) label = valueToShortString(raw);
+    const adapterTitle = ds.adapter?.getTitle?.(record, id);
+    if (adapterTitle != null && adapterTitle !== "") {
+      label = valueToShortString(adapterTitle);
+    } else {
+      const raw = pickFirstField(record, NAME_FIELDS);
+      if (raw != null) label = valueToShortString(raw);
+    }
     if (!label) label = String(id);
 
     // keep labels sane (avoid dumping big JSON into the list)
@@ -411,7 +745,17 @@
     return null;
   }
 
-  function getRecordStatsSummary(record) {
+  function getRecordStatsSummary(ds, record) {
+    const adapterStats = ds.adapter?.getStats?.(record);
+    if (adapterStats) {
+      if (typeof adapterStats === "string") return adapterStats;
+      if (Array.isArray(adapterStats)) {
+        const parts = adapterStats
+          .map((entry) => `${entry.label}: ${valueToShortString(entry.value)}`)
+          .filter(Boolean);
+        if (parts.length) return parts.slice(0, 2).join(" • ");
+      }
+    }
     const parts = [];
     for (const f of STAT_FIELDS) {
       const v = extractStatValue(record, f);
@@ -459,7 +803,7 @@
       out.push({
         id,
         label: getRecordLabel(ds, id, record),
-        stats: getRecordStatsSummary(record),
+        stats: getRecordStatsSummary(ds, record),
       });
     }
 
@@ -520,7 +864,7 @@
 
       if (chunks.length === 0) {
         // dataset exists but has no chunk files (valid per your constraints)
-        const ds = { key: datasetKey, meta, recordsMap, loadErrors, labelCache: new Map(), hayCache: new Map() };
+        const ds = { key: datasetKey, meta, recordsMap, loadErrors, labelCache: new Map(), hayCache: new Map(), adapter: getAdapterForDataset(datasetKey) };
         state.datasetCache.set(datasetKey, ds);
         return ds;
       }
@@ -546,7 +890,7 @@
         }
       }
 
-      const ds = { key: datasetKey, meta, recordsMap, loadErrors, labelCache: new Map(), hayCache: new Map() };
+      const ds = { key: datasetKey, meta, recordsMap, loadErrors, labelCache: new Map(), hayCache: new Map(), adapter: getAdapterForDataset(datasetKey) };
       state.datasetCache.set(datasetKey, ds);
       return ds;
     })();
@@ -674,6 +1018,9 @@
     if (!id) {
       if (meta) meta.textContent = `${ds.recordsMap.size} records loaded`;
       host.appendChild(el("div", { class: "placeholder" }, "Pick a record from the results list."));
+      if (ds.recordsMap.size > 0) {
+        renderDatasetInspector(host, ds);
+      }
       return;
     }
 
@@ -694,60 +1041,9 @@
 
     const normalizedRecord = normalizeValue(record);
     const showHidden = getShowHiddenForDataset(dsKey);
-    const isPrimitive = (v) => v == null || typeof v === "string" || typeof v === "number" || typeof v === "boolean";
-    // Readable top-level view
-    if (record && typeof record === "object" && !Array.isArray(record)) {
-      const keys = Object.keys(record).sort((a,b) => a.localeCompare(b));
-      const visibleKeys = keys.filter((k) => showHidden || !isNoiseKey(k));
-      const primaryKeys = visibleKeys.filter((k) => !isNoiseKey(k) && isPrimitive(record[k]));
-      const primaryKeySet = new Set(primaryKeys);
-
-      for (const k of primaryKeys) {
-        const v = record[k];
-        if (v == null) continue;
-        host.appendChild(el("div", { class: "kv" },
-          el("div", { class: "k" }, k),
-          el("div", { class: "v" }, formatValue(v))
-        ));
-      }
-
-      const secondaryObjectKeys = [];
-      const secondaryPrimitiveKeys = [];
-      for (const k of visibleKeys) {
-        if (primaryKeySet.has(k)) continue;
-        const v = record[k];
-        if (v == null) continue;
-        if (isPrimitive(v)) secondaryPrimitiveKeys.push(k);
-        else secondaryObjectKeys.push(k);
-      }
-
-      for (const k of secondaryObjectKeys) {
-        const v = record[k];
-        const summaryValue = formatValue(v);
-        const summaryLabel = Array.isArray(v)
-          ? `${k} (array[${v.length}])${summaryValue ? ` — ${summaryValue}` : ""}`
-          : `${k} (object)${summaryValue ? ` — ${summaryValue}` : ""}`;
-        const normalizedValue = normalizedRecord && typeof normalizedRecord === "object" ? normalizedRecord[k] : normalizeValue(v);
-        const d = el("details", { class: "details-block" },
-          el("summary", {}, summaryLabel),
-          el("pre", {}, safeJson(normalizedValue))
-        );
-        host.appendChild(d);
-      }
-
-      for (const k of secondaryPrimitiveKeys) {
-        const v = record[k];
-        host.appendChild(el("div", { class: "kv" },
-          el("div", { class: "k" }, k),
-          el("div", { class: "v" }, formatValue(v))
-        ));
-      }
-    } else {
-      // record is array or primitive
-      host.appendChild(el("details", { class: "details-block", open: true },
-        el("summary", {}, "Value"),
-        el("pre", {}, safeJson(normalizedRecord))
-      ));
+    const usedAdapter = renderAdapterSections(host, record, ds.adapter, showHidden);
+    if (!usedAdapter) {
+      renderGenericDetails(host, record, normalizedRecord, showHidden);
     }
 
     // Raw JSON view
@@ -808,6 +1104,7 @@
       const ds = await loadDataset(datasetKey);
 
       setStatus(`Loaded '${datasetKey}' — ${ds.recordsMap.size} records merged.`);
+      state.datasetInspectorCache.delete(datasetKey);
 
       $("#searchInput").disabled = false;
       $("#clearSearchBtn").disabled = false;
